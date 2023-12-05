@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Socket.IO chat</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <meta name="description" content="A simple chat app using Socket.io!" />
+    <link rel="icon" type="image/x-icon" href="./images/favicon.ico">
+    <link rel="apple-touch-icon" sizes="180x180" href="./images/apple-touch-icon.png">
+    <link rel="stylesheet" href="./style.css">
+    <link rel="manifest" href="./manifest.json">
+    <base href="./">
+</head>
+
+<body>
+    <script>
+        // register service worker
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker
+                .register('./sw.js')
+                .then(function (reg) {
+                    if (reg.installing) {
+                        console.log('Service worker installing');
+                    } else if (reg.waiting) {
+                        console.log('Service worker installed');
+                    } else if (reg.active) {
+                        console.log('Service worker active');
+                    }
+                })
+                .catch(function (error) {
+                    // registration failed
+                    console.log('Registration failed with ' + error);
+                });
+        }
+    </script>
+
+    <!-- user name display -->
+    <div id="username-display"></div>
+
+    <!-- pop-up to get and save username, if needed -->
+    <script>
+        let username;
+        document.addEventListener('DOMContentLoaded', (event) => {
+            username = localStorage.getItem('username');
+            if (!username) {
+                username = prompt('Please enter your username:');
+                // const key = 'username ' + new Date().getMilliseconds()
+                const key = 'username'
+                const value = username
+                localStorage.setItem(key, value);
+            }
+            document.getElementById('input').placeholder = `Typing as ${username}`;
+        });
+    </script>
+
+    <!-- messages list and form -->
+    <ul id="messages"></ul>
+    <form id="form" action="">
+        <div id="file-upload-trigger" style="display: flex; align-items: center; cursor: pointer;"><svg width="24"
+                height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path fill-rule="evenodd" clip-rule="evenodd"
+                    d="M9 7C9 4.23858 11.2386 2 14 2C16.7614 2 19 4.23858 19 7V15C19 18.866 15.866 22 12 22C8.13401 22 5 18.866 5 15V9C5 8.44772 5.44772 8 6 8C6.55228 8 7 8.44772 7 9V15C7 17.7614 9.23858 20 12 20C14.7614 20 17 17.7614 17 15V7C17 5.34315 15.6569 4 14 4C12.3431 4 11 5.34315 11 7V15C11 15.5523 11.4477 16 12 16C12.5523 16 13 15.5523 13 15V9C13 8.44772 13.4477 8 14 8C14.5523 8 15 8.44772 15 9V15C15 16.6569 13.6569 18 12 18C10.3431 18 9 16.6569 9 15V7Z"
+                    fill="currentColor"></path>
+            </svg>
+        </div>
+        <input id="file-input" multiple="" type="file" style="display: none;" tabindex="-1" class="hidden">
+        <input id="input" autocomplete="off" /><button>Send</button>
+    </form>
+
+    <!-- socket stuff -->
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+
+        const form = document.getElementById('form');
+        const input = document.getElementById('input');
+        const messages = document.getElementById('messages');
+
+        // Handle the paper clip getting clicked
+        document.getElementById('file-upload-trigger').addEventListener('click', () => {
+            document.getElementById('file-input').click();
+        });
+
+        // Send the docs when uploaded
+        document.getElementById('file-input').addEventListener('change', function () {
+            const files = this.files;
+            if (files.length > 0) {
+                // Handle file upload
+                const reader = new FileReader();
+                reader.onload = function (e) {
+                    const fileData = e.target.result;
+                    // Send file data through Socket.IO
+                    const msg = {
+                        file: fileData,
+                        fileName: files[0].name,
+                        user: username,
+                        date: new Date()
+                    }
+                    socket.emit('file upload', msg);
+                };
+                reader.readAsDataURL(files[0]);
+            }
+        });
+
+        form.addEventListener('submit', (e) => {
+            e.preventDefault();
+            if (input.value) {
+                const msg = {
+                    user: username,
+                    content: input.value,
+                    date: new Date()
+                }
+                socket.emit('chat message', msg);
+                input.value = '';
+            }
+        });
+
+        socket.on('chat message', (msg) => {
+            const item = document.createElement('li');
+            item.textContent = `${msg.user}: ${msg.content}`;
+            messages.appendChild(item);
+            window.scrollTo(0, document.body.scrollHeight);
+        });
+
+        socket.on('file received', (data) => {
+            // You can display the file or handle it as needed
+            console.log('File received from server:', data.fileName);
+
+            // If you want to display the image (assuming it's an image file)
+            if (data.file && data.fileName.match(/\.(jpeg|jpg|gif|png)$/)) {
+                const img = document.createElement('img');
+                // must scroll after image is loaded or else we'll scroll before :)
+                img.onload = () => {
+                    window.scrollTo(0, document.body.scrollHeight);
+                }
+                img.src = data.file;
+                img.style = "max-width: 100%;"
+                messages.appendChild(img); // append image to our message list
+            }
+        });
+    </script>
+</body>
+
+</html>
